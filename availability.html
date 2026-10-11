@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f6f7f4">
+    <meta name="description" content="Currently available monthly rooms listed by Haven.">
+    <title>Available rooms — Haven</title>
+    <link rel="stylesheet" href="availability.css">
+  </head>
+  <body>
+    <header class="availability-header">
+      <a class="availability-brand" href="./" aria-label="Haven home">
+        <span class="brand-mark" aria-hidden="true">H</span>
+        <span><strong>haven</strong><small>ROOM AVAILABILITY</small></span>
+      </a>
+      <span class="public-label">Client information</span>
+    </header>
+    <main class="availability-main">
+      <section class="availability-intro">
+        <p class="eyebrow">MONTHLY RENTALS</p>
+        <h1>Rooms currently available</h1>
+        <p>Browse room types and monthly prices. Availability can change, so please confirm your move-in date with the property owner.</p>
+      </section>
+      <div id="availability-content" aria-live="polite">
+        <section class="availability-message" role="status">Loading current availability…</section>
+      </div>
+      <p class="availability-privacy">This public page only shows selected room availability details. It does not provide access to tenant records or the owner’s Haven account.</p>
+    </main>
+    <footer class="availability-footer">
+      <span>Haven · Apartment management</span>
+      <span id="updated-at"></span>
+    </footer>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-config.js"></script>
+    <script src="availability.js"></script>
+  </body>
+</html>

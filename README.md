@@ -24,10 +24,20 @@ Open the app through an `http://` or `https://` address to sign in; browsers do 
 
 If you sign out, Haven returns to the records saved locally on that device. Cloud data remains in your account.
 
+## Sharing a read-only availability link
+
+The signed-in owner can use **Share availability** in the top bar to publish a client link. The link is public to anyone who receives it and contains only building names and rooms that have no current monthly tenant or current-day daily booking, with each room's number, floor, room type, and monthly listed rent. It excludes street addresses, tenant information, and booking records. Treat the link as public.
+
+The public page reads only a sanitized snapshot through the `get_haven_public_availability` database function. Direct anonymous access to the publication table is revoked; the function returns listing fields only when called with the unguessable share token in the link. Existing Haven installations should run `supabase-public-availability-setup.sql` in the configured Supabase project's SQL Editor before using this feature. New installations can run the complete `supabase-setup.sql`. Existing workspace data and its owner-only row-level security policy are unchanged.
+
+The public snapshot does not refresh itself when the owner's records change. After updating room or tenant records, sign in to Haven and click **Share availability** again; the same link is updated. The page shows when the snapshot was last refreshed. Ask clients to confirm availability for their intended move-in date. Grok can share the link, but the current custom bot has no direct live lookup connection; add the link to its instructions if its settings allow static instructions, or paste the link into a reply.
+
 ## Files
 
 - `index.html` — application page
 - `styles.css` — responsive styles
 - `app.js` — application behavior and browser storage
+- `availability.html`, `availability.css`, and `availability.js` — public read-only availability page
 - `supabase-config.js` — public Supabase project URL and publishable key
-- `supabase-setup.sql` — private per-user workspace table and row-level security
+- `supabase-setup.sql` — private per-user workspace and sanitized public availability setup
+- `supabase-public-availability-setup.sql` — additive migration for existing Supabase installations

@@ -175,9 +175,105 @@
     const status = document.getElementById("cloud-status");
     const dot = document.getElementById("cloud-status-dot");
     const button = document.getElementById("cloud-account-button");
+    const shareButton = document.getElementById("share-availability-button");
     status.textContent = message;
     dot.className = `secure-dot${state ? ` ${state}` : ""}`;
     button.textContent = activeCloudUserId ? "Cloud account" : "Connect cloud";
+    shareButton.hidden = !activeCloudUserId;
+  };
+  const renderAvailabilityShareDialog = (shareUrl, roomCount, buildingCount) => {
+    modalRoot.innerHTML = `<div class="modal-backdrop" data-action="close-modal"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <header class="modal-header"><div><h2 id="modal-title">Client availability link</h2><p>Share this page with clients or add the link to your Grok bot’s reply instructions.</p></div><button class="modal-close" type="button" aria-label="Close" data-action="close-modal">×</button></header>
+      <div class="confirm-copy"><p><strong>${roomCount} rooms</strong> across <strong>${buildingCount} buildings</strong> are in this published snapshot.</p><p>The link shows building names, room numbers, floors, room type, and monthly rent only. It does not show addresses, tenant details, bookings, or account access.</p><p>To refresh availability after changing room or tenant records, click <strong>Share availability</strong> again. The same link will show the newest snapshot and its update time.</p>
+      <label class="form-field">Client link<input id="availability-share-url" type="text" readonly value="${escapeHtml(shareUrl)}" aria-label="Client availability share link"></label></div>
+      <footer class="confirm-footer"><button class="danger-button" data-action="confirm-stop-sharing">Stop sharing</button><button class="secondary-button" data-action="close-modal">Close</button><button class="primary-button" data-action="copy-availability-link">Copy link</button></footer>
+    </section></div>`;
+    document.getElementById("availability-share-url").addEventListener("focus", (event) => event.target.select());
+  };
+  const publishAvailability = async () => {
+    if (!cloudClient || !activeCloudUserId) {
+      showToast("Sign in to your Haven cloud account before creating a client link.", true);
+      return;
+    }
+
+    const button = document.getElementById("share-availability-button");
+    button.disabled = true;
+    button.textContent = "Updating link…";
+    try {
+      const today = dateAtOffset(0);
+      const tomorrow = dateAtOffset(1);
+      const buildings = data.buildings.map((building) => ({
+        name: building.name,
+        rooms: building.units
+          .filter((unit) => !getCurrentTenant(unit.id)
+            && !data.dailyBookings.some((booking) => booking.status !== "cancelled"
+              && booking.unitId === unit.id
+              && datesOverlap(today, tomorrow, booking.checkIn, booking.checkOut)))
+          .map((unit) => ({
+            number: unit.number,
+            floor: unit.floor || "",
+            rent: Number(unit.rent) || 0,
+            cooling: unit.cooling
+          }))
+      })).filter((building) => building.rooms.length > 0);
+
+      const { data: existingShare, error: lookupError } = await cloudClient
+        .from("haven_public_availability")
+        .select("share_token")
+        .eq("user_id", activeCloudUserId)
+        .maybeSingle();
+      if (lookupError) throw lookupError;
+      const shareToken = existingShare?.share_token || crypto.randomUUID();
+      const { error: publishError } = await cloudClient.from("haven_public_availability").upsert({
+        user_id: activeCloudUserId,
+        share_token: shareToken,
+        listing_data: buildings,
+        updated_at: new Date().toISOString()
+      }, { onConflict: "user_id" });
+      if (publishError) throw publishError;
+
+      const shareUrl = new URL("availability.html", new URL("./", window.location.href));
+      shareUrl.searchParams.set("token", shareToken);
+      const roomCount = buildings.reduce((total, building) => total + building.rooms.length, 0);
+      renderAvailabilityShareDialog(shareUrl.href, roomCount, buildings.length);
+    } catch (error) {
+      console.error("Haven could not publish client availability:", error);
+      modalRoot.innerHTML = `<div class="modal-backdrop" data-action="close-modal"><section class="modal" role="alertdialog" aria-modal="true" aria-labelledby="modal-title">
+        <header class="modal-header"><div><h2 id="modal-title">Could not update the client link</h2><p>Your private Haven workspace was not changed.</p></div><button class="modal-close" type="button" aria-label="Close" data-action="close-modal">×</button></header>
+        <div class="confirm-copy"><p>${escapeHtml(error.message)}</p><p>Check that the latest <strong>supabase-setup.sql</strong> setup has been run in your Supabase project, then try again.</p></div>
+        <footer class="confirm-footer"><button class="secondary-button" data-action="close-modal">Close</button></footer>
+      </section></div>`;
+      showToast("The public availability link was not updated.", true);
+    } finally {
+      button.disabled = false;
+      button.textContent = "Share availability";
+    }
+  };
+  const stopSharingAvailability = async () => {
+    if (!cloudClient || !activeCloudUserId) return;
+    try {
+      const { error } = await cloudClient.from("haven_public_availability").delete().eq("user_id", activeCloudUserId);
+      if (error) throw error;
+      closeModal();
+      showToast("The public availability link has been turned off.");
+    } catch (error) {
+      console.error("Haven could not turn off public availability:", error);
+      showToast(`Could not turn off the public link. ${error.message}`, true);
+    }
+  };
+  const copyAvailabilityLink = async () => {
+    const input = document.getElementById("availability-share-url");
+    if (!input) return;
+    try {
+      await navigator.clipboard.writeText(input.value);
+      closeModal();
+      showToast("Client availability link copied.");
+    } catch (error) {
+      console.error("Haven could not copy the public availability link:", error);
+      input.focus();
+      input.select();
+      showToast("The link is selected. Copy it with Ctrl+C.", true);
+    }
   };
   const recordCounts = (records) => ({
     buildings: records.buildings.length,
@@ -1142,7 +1238,15 @@
     if (action === "close-modal") {
       if (target.classList.contains("modal-backdrop") && target !== clickEvent.target) return;
       closeModal();
-    } else if (action === "add-tenant") tenantModal();
+    } else if (action === "share-availability") publishAvailability();
+    else if (action === "copy-availability-link") copyAvailabilityLink();
+    else if (action === "confirm-stop-sharing") {
+      modalRoot.innerHTML = `<div class="modal-backdrop" data-action="close-modal"><section class="modal" role="alertdialog" aria-modal="true" aria-labelledby="modal-title">
+        <header class="modal-header"><div><h2 id="modal-title">Turn off the public link?</h2><p>Anyone using the current client link will no longer see your availability.</p></div><button class="modal-close" type="button" aria-label="Close" data-action="close-modal">×</button></header>
+        <footer class="confirm-footer"><button class="secondary-button" data-action="close-modal">Keep sharing</button><button class="danger-button" data-action="stop-sharing-availability">Turn off link</button></footer>
+      </section></div>`;
+    } else if (action === "stop-sharing-availability") stopSharingAvailability();
+    else if (action === "add-tenant") tenantModal();
     else if (action === "add-building") buildingModal();
     else if (action === "edit-building") buildingModal(target.dataset.building);
     else if (action === "add-daily-booking") dailyBookingModal();

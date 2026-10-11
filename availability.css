@@ -1,0 +1,250 @@
+:root {
+  color-scheme: light;
+  font-family: "Segoe UI", Arial, sans-serif;
+  color: #202b27;
+  background: #f6f7f4;
+  font-synthesis: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+}
+
+.availability-header {
+  display: flex;
+  height: 66px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 max(22px, calc((100vw - 1000px) / 2));
+  border-bottom: 1px solid #e9ece8;
+  background: #fff;
+}
+
+.availability-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.brand-mark {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 11px;
+  background: #246b54;
+  color: #fff;
+  font-weight: 750;
+}
+
+.availability-brand > span:last-child {
+  display: grid;
+  gap: 2px;
+}
+
+.availability-brand strong {
+  font-size: 19px;
+  letter-spacing: -0.7px;
+}
+
+.availability-brand small {
+  color: #87918b;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+}
+
+.public-label {
+  padding: 7px 10px;
+  border-radius: 20px;
+  background: #eef5f0;
+  color: #3b765d;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.availability-main {
+  width: min(1000px, calc(100% - 36px));
+  min-height: calc(100vh - 126px);
+  margin: 0 auto;
+  padding: 45px 0 50px;
+}
+
+.availability-intro {
+  margin-bottom: 24px;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  color: #246b54;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.15px;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin-top: 0;
+}
+
+h1 {
+  margin-bottom: 8px;
+  color: #202b27;
+  font-size: clamp(27px, 4vw, 34px);
+  letter-spacing: -0.8px;
+}
+
+.availability-intro > p:last-child {
+  max-width: 670px;
+  margin-bottom: 0;
+  color: #758078;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.availability-building {
+  margin: 0 0 20px;
+  padding: 20px;
+  border: 1px solid #e5eae5;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 5px 18px rgb(32 43 39 / 4%);
+}
+
+.availability-building h2 {
+  margin-bottom: 15px;
+  color: #2a4035;
+  font-size: 17px;
+}
+
+.availability-room-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 12px;
+}
+
+.availability-room {
+  padding: 15px;
+  border: 1px solid #edf0ed;
+  border-radius: 9px;
+  background: #fcfdfb;
+}
+
+.room-topline {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.room-topline h3 {
+  margin: 0;
+  color: #263a30;
+  font-size: 14px;
+}
+
+.available-badge {
+  padding: 4px 7px;
+  border-radius: 20px;
+  background: #eaf4ef;
+  color: #397454;
+  font-size: 9px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.room-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 12px;
+}
+
+.room-fact {
+  padding: 5px 8px;
+  border-radius: 5px;
+  background: #f0f3f0;
+  color: #647068;
+  font-size: 10px;
+}
+
+.room-price {
+  color: #246b54;
+  font-size: 20px;
+  font-weight: 750;
+  letter-spacing: -0.4px;
+}
+
+.room-price small {
+  color: #7e8981;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.availability-message {
+  padding: 22px;
+  border: 1px solid #e4e9e4;
+  border-radius: 10px;
+  background: #fff;
+  color: #66736b;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.availability-message.error {
+  border-color: #efd7d2;
+  background: #fffafa;
+  color: #8b433a;
+}
+
+.availability-privacy {
+  margin: 20px 0 0;
+  color: #89928c;
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.availability-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 17px max(22px, calc((100vw - 1000px) / 2));
+  border-top: 1px solid #e9ece8;
+  background: #fff;
+  color: #87918b;
+  font-size: 10px;
+}
+
+@media (max-width: 520px) {
+  .availability-header {
+    height: 60px;
+  }
+
+  .availability-main {
+    padding-top: 32px;
+  }
+
+  .availability-building {
+    padding: 15px;
+  }
+
+  .availability-room-list {
+    grid-template-columns: 1fr;
+  }
+
+  .availability-footer {
+    flex-direction: column;
+  }
+}

@@ -65,6 +65,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .secure-dot.sync-error { background: #b4564c; }
 .cloud-account-button { min-height: 30px; white-space: nowrap; }
 .cloud-account-button[hidden] { display: none; }
+.share-availability-button[hidden] { display: none; }
 .page-content { max-width: 1440px; margin: 0 auto; padding: 34px 42px 56px; }
 .page-content.buildings-page { width: 100%; max-width: none; padding-right: clamp(24px, 3vw, 56px); padding-left: clamp(24px, 3vw, 56px); }
 
