@@ -66,6 +66,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .cloud-account-button { min-height: 30px; white-space: nowrap; }
 .cloud-account-button[hidden] { display: none; }
 .share-availability-button[hidden] { display: none; }
+.room-manager-access-button[hidden] { display: none; }
+.room-manager-requests-button[hidden] { display: none; }
 .page-content { max-width: 1440px; margin: 0 auto; padding: 34px 42px 56px; }
 .page-content.buildings-page { width: 100%; max-width: none; padding-right: clamp(24px, 3vw, 56px); padding-left: clamp(24px, 3vw, 56px); }
 
@@ -359,6 +361,16 @@ h1 { margin-bottom: 7px; font: 700 27px/1.25 "Segoe UI", Arial, sans-serif; lett
 .confirm-summary strong { margin-bottom: 4px; font-size: 11px; }
 .confirm-summary span { color: var(--muted); font-size: 9px; }
 .confirm-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 16px 23px 21px; }
+.manager-requests { display: grid; max-height: min(65vh, 620px); overflow-y: auto; gap: 10px; padding: 17px 23px; }
+.manager-request { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px; padding: 14px; border: 1px solid #e6ebe6; border-radius: 9px; }
+.manager-request-copy p { margin: 0 0 7px; color: #5b675f; font-size: 12px; }
+.manager-request-copy > p:first-child { color: var(--ink); }
+.manager-request-copy .form-hint { margin: 8px 0 0; }
+.manager-request-changes { display: grid; gap: 4px; margin: 9px 0; padding: 0; list-style: none; }
+.manager-request-changes li { display: flex; justify-content: space-between; gap: 16px; color: #748078; font-size: 11px; }
+.manager-request-changes li span:last-child { color: var(--ink); text-align: right; }
+.manager-request-actions { display: flex; gap: 7px; }
+.manager-requests-empty { margin: 0; color: var(--muted); font-size: 13px; }
 .toast-region { position: fixed; z-index: 20; right: 22px; bottom: 22px; display: grid; gap: 9px; }
 .toast { display: flex; align-items: center; gap: 9px; max-width: min(390px, calc(100vw - 36px)); padding: 12px 15px; color: #fff; background: #263a30; border-radius: 9px; box-shadow: var(--shadow); font-size: 11px; animation: modal-in .18s ease-out; }
 .toast::before { display: grid; width: 17px; height: 17px; place-items: center; color: #1c503d; background: #c9e4d1; border-radius: 50%; content: "✓"; font-size: 10px; font-weight: 700; }
@@ -421,10 +433,15 @@ h1 { margin-bottom: 7px; font: 700 27px/1.25 "Segoe UI", Arial, sans-serif; lett
   .brand-mark { width: 36px; height: 36px; border-radius: 11px; }
   .brand { margin-bottom: 31px; }
   .main-content { margin-left: 56px; }
-  .topbar { height: 55px; padding: 0 13px; }
-  .topbar-right { gap: 0; }
+  .topbar { height: auto; min-height: 55px; align-items: flex-start; flex-direction: column; gap: 5px; padding: 8px 13px; }
+  .topbar-right { width: 100%; flex-wrap: wrap; justify-content: flex-end; gap: 3px; }
   .today-label { display: none; }
   .secure-label { font-size: 9px; }
+  .secure-label { margin-right: auto; }
+  .cloud-account-button, .share-availability-button, .room-manager-access-button, .room-manager-requests-button { min-height: 26px; padding: 3px 5px; font-size: 8px; }
+  .manager-requests { padding-right: 13px; padding-left: 13px; }
+  .manager-request { grid-template-columns: 1fr; }
+  .manager-request-actions { justify-content: flex-end; flex-wrap: wrap; }
   .cloud-account-button { padding-right: 4px; padding-left: 4px; font-size: 9px; }
   .cloud-screen { padding: 12px; }
   .cloud-card { padding: 21px; }

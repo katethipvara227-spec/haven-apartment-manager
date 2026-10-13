@@ -57,6 +57,8 @@
   let cloudClient = null;
   let activeCloudUser = null;
   let activeCloudUserId = null;
+  let roomHolds = [];
+  let roomHoldsLoaded = true;
   let pendingCloudUser = null;
   let pendingImportData = null;
   let cloudSyncTimer = null;
@@ -119,12 +121,17 @@
     monthlyConflict: data.tenants.some((tenant) => tenant.status === "current" && tenant.unitId === unitId
       && datesOverlap(checkIn, checkOut, tenant.startDate, tenant.endDate)),
     dailyConflict: data.dailyBookings.some((booking) => booking.status !== "cancelled" && booking.id !== exceptBookingId
-      && booking.unitId === unitId && datesOverlap(checkIn, checkOut, booking.checkIn, booking.checkOut))
+      && booking.unitId === unitId && datesOverlap(checkIn, checkOut, booking.checkIn, booking.checkOut)),
+    holdConflict: !roomHoldsLoaded || roomHolds.some((hold) => hold.unit_id === unitId && hold.end_date > checkIn && checkOut > hold.start_date)
   });
+  const hasRoomHold = (unitId, startDate, endDate) => !roomHoldsLoaded || roomHolds.some((hold) =>
+    hold.unit_id === unitId && datesOverlap(startDate, endDate, hold.start_date, hold.end_date));
   const getCurrentTenant = (unitId) => data.tenants.find((tenant) => tenant.unitId === unitId && tenant.status === "current");
   const getOccupancy = (building) => {
     const occupied = building.units.filter((unit) => getCurrentTenant(unit.id)).length;
-    return { occupied, total: building.units.length };
+    const heldToday = building.units.filter((unit) => hasRoomHold(unit.id, dateAtOffset(0), dateAtOffset(1))
+      && !getCurrentTenant(unit.id)).length;
+    return { occupied, total: building.units.length, heldToday };
   };
   const getMonthlyRevenue = (building) => ({
     current: building.units.reduce((total, unit) => total + (getCurrentTenant(unit.id)?.rent ?? 0), 0),
@@ -176,23 +183,27 @@
     const dot = document.getElementById("cloud-status-dot");
     const button = document.getElementById("cloud-account-button");
     const shareButton = document.getElementById("share-availability-button");
+    const roomManagerButton = document.getElementById("room-manager-access-button");
+    const roomManagerRequestsButton = document.getElementById("room-manager-requests-button");
     status.textContent = message;
     dot.className = `secure-dot${state ? ` ${state}` : ""}`;
     button.textContent = activeCloudUserId ? "Cloud account" : "Connect cloud";
     shareButton.hidden = !activeCloudUserId;
+    roomManagerButton.hidden = !activeCloudUserId;
+    roomManagerRequestsButton.hidden = !activeCloudUserId;
   };
   const renderAvailabilityShareDialog = (shareUrl, roomCount, buildingCount) => {
     modalRoot.innerHTML = `<div class="modal-backdrop" data-action="close-modal"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-      <header class="modal-header"><div><h2 id="modal-title">Client availability link</h2><p>Share this page with clients or add the link to your Grok bot’s reply instructions.</p></div><button class="modal-close" type="button" aria-label="Close" data-action="close-modal">×</button></header>
+      <header class="modal-header"><div><h2 id="modal-title">Internal availability link</h2><p>This link is read-only and should be kept internal for NATO. Do not send it to clients.</p></div><button class="modal-close" type="button" aria-label="Close" data-action="close-modal">×</button></header>
       <div class="confirm-copy"><p><strong>${roomCount} rooms</strong> across <strong>${buildingCount} buildings</strong> are in this published snapshot.</p><p>The link shows building names, room numbers, floors, room type, and monthly rent only. It does not show addresses, tenant details, bookings, or account access.</p><p>To refresh availability after changing room or tenant records, click <strong>Share availability</strong> again. The same link will show the newest snapshot and its update time.</p>
-      <label class="form-field">Client link<input id="availability-share-url" type="text" readonly value="${escapeHtml(shareUrl)}" aria-label="Client availability share link"></label></div>
+      <label class="form-field">Internal link<input id="availability-share-url" type="text" readonly value="${escapeHtml(shareUrl)}" aria-label="Internal availability link"></label></div>
       <footer class="confirm-footer"><button class="danger-button" data-action="confirm-stop-sharing">Stop sharing</button><button class="secondary-button" data-action="close-modal">Close</button><button class="primary-button" data-action="copy-availability-link">Copy link</button></footer>
     </section></div>`;
     document.getElementById("availability-share-url").addEventListener("focus", (event) => event.target.select());
   };
   const publishAvailability = async () => {
     if (!cloudClient || !activeCloudUserId) {
-      showToast("Sign in to your Haven cloud account before creating a client link.", true);
+      showToast("Sign in to your Haven cloud account before publishing the internal availability link.", true);
       return;
     }
 
@@ -202,13 +213,20 @@
     try {
       const today = dateAtOffset(0);
       const tomorrow = dateAtOffset(1);
+      const { data: holds, error: holdsError } = await cloudClient.from("haven_room_holds")
+        .select("unit_id,start_date,end_date")
+        .eq("user_id", activeCloudUserId)
+        .gt("end_date", today);
+      if (holdsError) throw holdsError;
       const buildings = data.buildings.map((building) => ({
         name: building.name,
         rooms: building.units
           .filter((unit) => !getCurrentTenant(unit.id)
             && !data.dailyBookings.some((booking) => booking.status !== "cancelled"
               && booking.unitId === unit.id
-              && datesOverlap(today, tomorrow, booking.checkIn, booking.checkOut)))
+              && datesOverlap(today, tomorrow, booking.checkIn, booking.checkOut))
+            && !(holds || []).some((hold) => hold.unit_id === unit.id
+              && datesOverlap(today, tomorrow, hold.start_date, hold.end_date)))
           .map((unit) => ({
             number: unit.number,
             floor: unit.floor || "",
@@ -239,7 +257,7 @@
     } catch (error) {
       console.error("Haven could not publish client availability:", error);
       modalRoot.innerHTML = `<div class="modal-backdrop" data-action="close-modal"><section class="modal" role="alertdialog" aria-modal="true" aria-labelledby="modal-title">
-        <header class="modal-header"><div><h2 id="modal-title">Could not update the client link</h2><p>Your private Haven workspace was not changed.</p></div><button class="modal-close" type="button" aria-label="Close" data-action="close-modal">×</button></header>
+        <header class="modal-header"><div><h2 id="modal-title">Could not update the internal link</h2><p>Your private Haven workspace was not changed.</p></div><button class="modal-close" type="button" aria-label="Close" data-action="close-modal">×</button></header>
         <div class="confirm-copy"><p>${escapeHtml(error.message)}</p><p>Check that the latest <strong>supabase-setup.sql</strong> setup has been run in your Supabase project, then try again.</p></div>
         <footer class="confirm-footer"><button class="secondary-button" data-action="close-modal">Close</button></footer>
       </section></div>`;
@@ -267,12 +285,216 @@
     try {
       await navigator.clipboard.writeText(input.value);
       closeModal();
-      showToast("Client availability link copied.");
+      showToast("Internal availability link copied. Do not share it with clients.");
     } catch (error) {
       console.error("Haven could not copy the public availability link:", error);
       input.focus();
       input.select();
       showToast("The link is selected. Copy it with Ctrl+C.", true);
+    }
+  };
+  const roomManagerUrl = (accessToken) => {
+    const url = new URL("room-manager.html", new URL("./", window.location.href));
+    url.searchParams.set("token", accessToken);
+    return url.href;
+  };
+  const renderRoomManagerAccessDialog = (accessToken) => {
+    const managerUrl = roomManagerUrl(accessToken);
+    modalRoot.innerHTML = `<div class="modal-backdrop" data-action="close-modal"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <header class="modal-header"><div><h2 id="modal-title">NATO room access</h2><p>A separate, revocable link for room management only.</p></div><button class="modal-close" type="button" aria-label="Close" data-action="close-modal">×</button></header>
+      <div class="confirm-copy"><p>This link can view room numbers, floors, room types, prices, and whether a room is occupied or held. It can submit requests to change room details and add or remove temporary holds. Those requests do not change live records until you approve them in Haven. The link cannot access tenant names, contact details, lease records, guest details, or building addresses.</p><p><strong>Keep this link private.</strong> Anyone who gets it can view room-only information and submit requests, but only your signed-in Haven account can approve a change. Instruct NATO to summarize each proposed change and wait for your explicit approval in chat before submitting. Rotate or revoke the link if it is exposed.</p>
+      <label class="form-field">Private NATO room-management link<input id="room-manager-url" type="text" readonly value="${escapeHtml(managerUrl)}" aria-label="Private NATO room-management link"></label></div>
+      <footer class="confirm-footer"><button class="danger-button" data-action="revoke-room-manager-link">Revoke link</button><button class="secondary-button" data-action="rotate-room-manager-link">Rotate link</button><button class="secondary-button" data-action="close-modal">Close</button><button class="primary-button" data-action="copy-room-manager-link">Copy private link</button></footer>
+    </section></div>`;
+    document.getElementById("room-manager-url").addEventListener("focus", (event) => event.target.select());
+  };
+  const openRoomManagerAccess = async () => {
+    if (!cloudClient || !activeCloudUserId) {
+      showToast("Sign in to your Haven cloud account before creating NATO room access.", true);
+      return;
+    }
+    const button = document.getElementById("room-manager-access-button");
+    button.disabled = true;
+    try {
+      const { data: access, error: lookupError } = await cloudClient.from("haven_room_manager_access")
+        .select("access_token")
+        .eq("user_id", activeCloudUserId)
+        .maybeSingle();
+      if (lookupError) throw lookupError;
+      let accessToken = access?.access_token;
+      if (!accessToken) {
+        const { data: newAccessToken, error } = await cloudClient.rpc("rotate_haven_room_manager_access");
+        if (error) throw error;
+        accessToken = newAccessToken;
+      }
+      renderRoomManagerAccessDialog(accessToken);
+    } catch (error) {
+      console.error("Haven could not open NATO room access:", error);
+      showToast(`Could not create the room-management link. Run supabase-room-manager-setup.sql in Supabase, then try again. ${error.message}`, true);
+    } finally {
+      button.disabled = false;
+    }
+  };
+  const copyRoomManagerLink = async () => {
+    const input = document.getElementById("room-manager-url");
+    if (!input) return;
+    try {
+      await navigator.clipboard.writeText(input.value);
+      closeModal();
+      showToast("Private NATO room-management link copied. Do not share it with clients.");
+    } catch (error) {
+      console.error("Haven could not copy the room-management link:", error);
+      input.focus();
+      input.select();
+      showToast("The private link is selected. Copy it with Ctrl+C.", true);
+    }
+  };
+  const rotateRoomManagerLink = async () => {
+    if (!cloudClient || !activeCloudUserId) return;
+    modalRoot.innerHTML = `<div class="modal-backdrop"><section class="modal" role="alertdialog" aria-modal="true" aria-labelledby="modal-title"><header class="modal-header"><div><h2 id="modal-title">Replace NATO’s link?</h2><p>The current link will stop working immediately.</p></div></header><div class="confirm-copy"><p>Only someone with the new link will be able to view or manage rooms.</p></div><footer class="confirm-footer"><button class="secondary-button" data-action="close-modal">Keep current link</button><button class="danger-button" data-action="confirm-rotate-room-manager-link">Rotate link</button></footer></section></div>`;
+  };
+  const confirmRotateRoomManagerLink = async () => {
+    try {
+      const { data: accessToken, error } = await cloudClient.rpc("rotate_haven_room_manager_access");
+      if (error) throw error;
+      renderRoomManagerAccessDialog(accessToken);
+    } catch (error) {
+      console.error("Haven could not rotate the NATO room link:", error);
+      showToast(`Could not rotate the room-management link. ${error.message}`, true);
+    }
+  };
+  const revokeRoomManagerLink = async () => {
+    try {
+      const { error } = await cloudClient.rpc("revoke_haven_room_manager_access");
+      if (error) throw error;
+      closeModal();
+      showToast("NATO room access has been revoked.");
+    } catch (error) {
+      console.error("Haven could not revoke NATO room access:", error);
+      showToast(`Could not revoke the room-management link. ${error.message}`, true);
+    }
+  };
+  const describeRoomManagerRequest = (request) => {
+    const building = getBuilding(request.building_id);
+    const unit = getUnit(request.building_id, request.unit_id);
+    const roomLabel = `${building?.name || "Building"} · Room ${unit?.number || "—"}`;
+    const details = request.request_data || {};
+    if (request.action === "update_room") {
+      const changes = [
+        ["Room number", unit?.number || "—", details.number],
+        ["Floor", unit?.floor || "not set", details.floor],
+        ["Listed monthly rent", `${formatMoney(unit?.rent)} THB`, `${formatMoney(details.rent)} THB`],
+        ["Room type", coolingLabel(unit?.cooling), coolingLabel(details.cooling)]
+      ];
+      return `<p><strong>${escapeHtml(roomLabel)}</strong> · Update room details</p><ul class="manager-request-changes">${changes.map(([label, before, after]) => `<li><span>${escapeHtml(label)}</span><span>${escapeHtml(before)} → <strong>${escapeHtml(after)}</strong></span></li>`).join("")}</ul>`;
+    }
+    if (request.action === "create_hold") {
+      return `<p><strong>${escapeHtml(roomLabel)}</strong> · Add temporary hold</p><p>From ${escapeHtml(formatDate(details.startDate))} through ${escapeHtml(formatDate(details.endDate))}. The end date is the first date the room becomes available again; maximum hold length is 90 days.</p>`;
+    }
+    const hold = roomHolds.find((item) => item.id === details.holdId);
+    return `<p><strong>${escapeHtml(roomLabel)}</strong> · Remove temporary hold</p>${hold ? `<p>${escapeHtml(formatDate(hold.start_date))} – ${escapeHtml(formatDate(hold.end_date))}</p>` : `<p>This hold was already removed or expired.</p>`}`;
+  };
+  const openRoomManagerRequests = async () => {
+    if (!cloudClient || !activeCloudUserId) return;
+    try {
+      await refreshRoomHolds();
+      const { data: requests, error } = await cloudClient.from("haven_room_manager_requests")
+        .select("id,action,building_id,unit_id,request_data,requested_at")
+        .eq("user_id", activeCloudUserId)
+        .eq("status", "pending")
+        .order("requested_at", { ascending: true });
+      if (error) throw error;
+      modalRoot.innerHTML = `<div class="modal-backdrop" data-action="close-modal"><section class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <header class="modal-header"><div><h2 id="modal-title">Review NATO requests</h2><p>Nothing changes until you approve a request here while signed in to Haven.</p></div><button class="modal-close" type="button" aria-label="Close" data-action="close-modal">×</button></header>
+        <div class="manager-requests">${requests?.length ? requests.map((request) => `<article class="manager-request" data-request="${escapeHtml(request.id)}">
+          <div class="manager-request-copy">${describeRoomManagerRequest(request)}<p class="form-hint">Requested ${escapeHtml(formatDate(String(request.requested_at).slice(0, 10)))}</p></div>
+          <div class="manager-request-actions"><button class="danger-button" type="button" data-action="reject-room-manager-request" data-request="${escapeHtml(request.id)}">Reject</button><button class="primary-button" type="button" data-action="approve-room-manager-request" data-request="${escapeHtml(request.id)}">Approve and apply</button></div>
+        </article>`).join("") : `<p class="manager-requests-empty">There are no pending room-management requests.</p>`}</div>
+        <footer class="confirm-footer"><button class="secondary-button" data-action="close-modal">Close</button></footer>
+      </section></div>`;
+    } catch (error) {
+      console.error("Haven could not load NATO's room-management requests:", error);
+      showToast(`Could not load NATO requests. Check your connection and run supabase-room-manager-setup.sql if needed. ${error.message}`, true);
+    }
+  };
+  const decideRoomManagerRequest = async (requestId, approve) => {
+    const buttons = [...modalRoot.querySelectorAll(`[data-request="${CSS.escape(requestId)}"] button`)];
+    buttons.forEach((button) => { button.disabled = true; });
+    try {
+      if (approve) await flushPendingCloudSync();
+      const { error } = await cloudClient.rpc(
+        approve ? "approve_haven_room_manager_request" : "reject_haven_room_manager_request",
+        { p_request_id: requestId }
+      );
+      if (error) throw error;
+      if (approve) {
+        const owner = activeCloudUser;
+        if (owner) await loadCloudWorkspace(owner);
+        await refreshRoomHolds();
+      }
+      showToast(approve ? "Request approved and applied." : "Request rejected.");
+      await openRoomManagerRequests();
+    } catch (error) {
+      console.error(`Haven could not ${approve ? "approve" : "reject"} the NATO request:`, error);
+      showToast(`Could not ${approve ? "approve" : "reject"} this request. ${error.message}`, true);
+      buttons.forEach((button) => { button.disabled = false; });
+    }
+  };
+  const refreshRoomHolds = async () => {
+    if (!cloudClient || !activeCloudUserId) {
+      roomHolds = [];
+      roomHoldsLoaded = true;
+      return;
+    }
+    roomHolds = [];
+    roomHoldsLoaded = false;
+    const { data: holds, error } = await cloudClient.from("haven_room_holds")
+      .select("id,building_id,unit_id,start_date,end_date")
+      .eq("user_id", activeCloudUserId)
+      .gt("end_date", dateAtOffset(0));
+    if (error) throw error;
+    roomHolds = holds || [];
+    roomHoldsLoaded = true;
+  };
+  const refreshRoomHoldsSafely = async () => {
+    try {
+      await refreshRoomHolds();
+      render();
+    } catch (error) {
+      console.error("Haven could not load room holds:", error);
+      render();
+      showToast(`Room hold status could not be checked. Apply supabase-room-manager-setup.sql before managing holds. ${error.message}`, true);
+    }
+  };
+  const flushPendingCloudSync = async () => {
+    if (!cloudClient || !activeCloudUserId) {
+      throw new Error("Sign in to the Haven owner account before approving a room request.");
+    }
+    window.clearTimeout(cloudSyncTimer);
+    const ownerId = activeCloudUserId;
+    const snapshot = JSON.parse(JSON.stringify(data));
+    cloudSyncQueue = cloudSyncQueue.catch(() => {}).then(async () => {
+      if (ownerId !== activeCloudUserId) {
+        throw new Error("The Haven account changed. Sign in again before approving this request.");
+      }
+      const { error } = await cloudClient.from("haven_workspaces").upsert({
+        user_id: ownerId,
+        workspace_data: snapshot,
+        updated_at: new Date().toISOString()
+      }, { onConflict: "user_id" });
+      if (error) throw error;
+      setCloudStatus("Cloud synced");
+    });
+    await cloudSyncQueue;
+  };
+  const ensureRoomHoldsAvailable = async () => {
+    try {
+      await refreshRoomHolds();
+      return true;
+    } catch (error) {
+      console.error("Haven could not verify room holds before saving:", error);
+      showToast(`Could not verify room holds, so this change was not saved. Check your connection and run supabase-room-manager-setup.sql if needed. ${error.message}`, true);
+      return false;
     }
   };
   const recordCounts = (records) => ({
@@ -374,6 +596,8 @@
     if (error) throw error;
     activeCloudUser = user;
     activeCloudUserId = user.id;
+    roomHolds = [];
+    roomHoldsLoaded = false;
     pendingCloudUser = null;
     data = normalizeData(workspaceData);
     try {
@@ -385,6 +609,7 @@
     closeCloudPanel();
     render();
     setCloudStatus("Cloud synced");
+    refreshRoomHoldsSafely();
   };
   const loadCloudWorkspace = async (user) => {
     if (!cloudClient || !user) return;
@@ -405,6 +630,8 @@
       }
       data = normalizeData(row.workspace_data);
       activeCloudUserId = user.id;
+      roomHolds = [];
+      roomHoldsLoaded = false;
       pendingCloudUser = null;
       try {
         localStorage.setItem(CLOUD_CACHE_KEY, JSON.stringify(data));
@@ -414,11 +641,14 @@
       closeCloudPanel();
       render();
       setCloudStatus("Cloud synced");
+      refreshRoomHoldsSafely();
     } catch (error) {
       console.error("Haven could not load the cloud workspace:", error);
       renderCloudAuthForm("signin", `Could not open your cloud workspace: ${error.message}. Check that the Haven database setup has been run, then try again.`, true);
       activeCloudUser = null;
       activeCloudUserId = null;
+      roomHolds = [];
+      roomHoldsLoaded = true;
       pendingCloudUser = null;
       setCloudStatus("Cloud setup needed", "sync-error");
     }
@@ -463,6 +693,8 @@
       if (event === "SIGNED_OUT") {
         activeCloudUser = null;
         activeCloudUserId = null;
+        roomHolds = [];
+        roomHoldsLoaded = true;
         pendingCloudUser = null;
         try {
           data = loadData();
@@ -948,10 +1180,10 @@
   const buildingIllustration = () => `<svg viewBox="0 0 80 80" fill="none" aria-hidden="true"><path d="M17 68V25l22-12 24 12v43M11 68h58M31 68V53h17v15M26 30h7v7h-7zM47 30h7v7h-7zM26 43h7v7h-7zM47 43h7v7h-7z" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="m12 25 27-15 29 15" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   const renderBuildings = () => `${pageHeading("YOUR PORTFOLIO", "Your buildings", "All your properties and rooms, together in one place.", "Add a building", "add-building")}
     ${data.buildings.length ? `<section class="building-grid">${data.buildings.map((building, index) => {
-      const { occupied, total } = getOccupancy(building);
+      const { occupied, total, heldToday } = getOccupancy(building);
       const revenue = getMonthlyRevenue(building);
       return `<article class="building-card"><div class="building-visual variant-${index % 3}">${buildingIllustration()}</div><div class="building-content"><div class="building-title-row"><div><h2>${escapeHtml(building.name)}</h2><p class="building-address">${escapeHtml(building.address)}</p></div><div class="building-title-actions"><button class="secondary-button building-edit-button" data-action="edit-building" data-building="${escapeHtml(building.id)}">Edit building details</button><button class="secondary-button building-add-room-button" data-action="add-sheet-room" data-building="${escapeHtml(building.id)}">+ Add a room</button></div></div>
-        <div class="building-stats"><div class="building-stat"><strong>${total}</strong><span>Rooms</span></div><div class="building-stat"><strong>${occupied}</strong><span>Occupied</span></div><div class="building-stat"><strong>${total - occupied}</strong><span>Available</span></div></div>
+        <div class="building-stats"><div class="building-stat"><strong>${total}</strong><span>Rooms</span></div><div class="building-stat"><strong>${occupied}</strong><span>Occupied</span></div><div class="building-stat"><strong>${Math.max(0, total - occupied - heldToday)}</strong><span>Available today</span></div></div>
         <div class="building-progress" aria-label="${occupied} of ${total} rooms occupied"><span style="width:${total ? Math.round(occupied / total * 100) : 0}%"></span></div><div class="building-foot"><span>${total ? Math.round(occupied / total * 100) : 0}% occupied</span></div>
         <div class="building-revenue"><div><span>Current monthly income</span><strong>${formatMoney(revenue.current)}</strong></div><div><span>If all rooms rented</span><strong>${formatMoney(revenue.potential)}</strong></div></div>
         <details class="building-units" data-room-building="${escapeHtml(building.id)}"><summary>All room details in this building</summary>
@@ -972,14 +1204,17 @@
   };
 
   const tenantModal = () => {
+    const defaultStart = dateAtOffset(0);
+    const defaultEnd = dateAtMonthOffset(1);
     const available = data.buildings.flatMap((building) => building.units
-      .filter((unit) => !getCurrentTenant(unit.id))
+      .filter((unit) => !getCurrentTenant(unit.id) && !hasRoomHold(unit.id, defaultStart, defaultEnd))
       .map((unit) => ({ building, unit })));
     if (!available.length) {
       showToast("There are no available rooms. Add a building or room first.", true);
       return;
     }
-    const availableBuildings = data.buildings.filter((building) => building.units.some((unit) => !getCurrentTenant(unit.id)));
+    const availableBuildings = data.buildings.filter((building) => building.units.some((unit) =>
+      !getCurrentTenant(unit.id) && !hasRoomHold(unit.id, defaultStart, defaultEnd)));
     const buildingOptions = availableBuildings.map((building) => `<option value="${escapeHtml(building.id)}">${escapeHtml(building.name)}</option>`).join("");
     modalRoot.innerHTML = `<div class="modal-backdrop" data-action="close-modal"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><header class="modal-header"><div><h2 id="modal-title">Add a tenant</h2><p>Add their details and rental dates. You can change these later.</p></div><button class="modal-close" type="button" aria-label="Close" data-action="close-modal">×</button></header>
       <form class="modal-form" id="tenant-form"><p class="form-section-title">TENANT DETAILS</p><div class="form-grid">
@@ -1007,9 +1242,23 @@
   const tenantRoomOptions = (buildingId) => {
     const building = getBuilding(buildingId);
     if (!building) return `<option value="">Choose a building first</option>`;
-    const availableUnits = building.units.filter((unit) => !getCurrentTenant(unit.id));
+    const startDate = document.getElementById("lease-start")?.value || dateAtOffset(0);
+    const endDate = document.getElementById("lease-end")?.value || dateAtMonthOffset(1);
+    const availableUnits = building.units.filter((unit) => !getCurrentTenant(unit.id)
+      && !hasRoomHold(unit.id, startDate, endDate));
     if (!availableUnits.length) return `<option value="">No rooms available in this building</option>`;
     return `<option value="">Choose a room</option>${availableUnits.map((unit) => `<option value="${escapeHtml(unit.id)}">${escapeHtml(unit.number)} · ${formatMoney(unit.rent)} monthly · Floor ${escapeHtml(unit.floor || "not set")} · ${coolingLabel(unit.cooling)}</option>`).join("")}`;
+  };
+  const refreshTenantRoomChoices = () => {
+    const buildingId = document.getElementById("tenant-building")?.value;
+    const roomSelect = document.getElementById("tenant-apartment");
+    if (!buildingId || !roomSelect) return;
+    const selectedUnitId = roomSelect.value;
+    roomSelect.innerHTML = tenantRoomOptions(buildingId);
+    const hasSelectedUnit = [...roomSelect.options].some((option) => option.value === selectedUnitId);
+    if (hasSelectedUnit) roomSelect.value = selectedUnitId;
+    else document.getElementById("tenant-rent").value = "";
+    roomSelect.disabled = ![...roomSelect.options].some((option) => option.value);
   };
 
   const buildingModal = (buildingId = "") => {
@@ -1239,7 +1488,15 @@
       if (target.classList.contains("modal-backdrop") && target !== clickEvent.target) return;
       closeModal();
     } else if (action === "share-availability") publishAvailability();
+    else if (action === "room-manager-access") openRoomManagerAccess();
+    else if (action === "room-manager-requests") openRoomManagerRequests();
     else if (action === "copy-availability-link") copyAvailabilityLink();
+    else if (action === "copy-room-manager-link") copyRoomManagerLink();
+    else if (action === "rotate-room-manager-link") rotateRoomManagerLink();
+    else if (action === "confirm-rotate-room-manager-link") confirmRotateRoomManagerLink();
+    else if (action === "revoke-room-manager-link") revokeRoomManagerLink();
+    else if (action === "approve-room-manager-request") decideRoomManagerRequest(target.dataset.request, true);
+    else if (action === "reject-room-manager-request") decideRoomManagerRequest(target.dataset.request, false);
     else if (action === "confirm-stop-sharing") {
       modalRoot.innerHTML = `<div class="modal-backdrop" data-action="close-modal"><section class="modal" role="alertdialog" aria-modal="true" aria-labelledby="modal-title">
         <header class="modal-header"><div><h2 id="modal-title">Turn off the public link?</h2><p>Anyone using the current client link will no longer see your availability.</p></div><button class="modal-close" type="button" aria-label="Close" data-action="close-modal">×</button></header>
@@ -1476,7 +1733,10 @@
       search.focus();
       search.setSelectionRange(position, position);
     }
-    if (event.target.id === "lease-start" || event.target.id === "lease-end") updateTermPreview();
+    if (event.target.id === "lease-start" || event.target.id === "lease-end") {
+      updateTermPreview();
+      refreshTenantRoomChoices();
+    }
   });
   document.addEventListener("change", (event) => {
     if (event.target.dataset.filter === "building") {
@@ -1489,7 +1749,7 @@
     if (event.target.id === "tenant-building") {
       const roomSelect = document.getElementById("tenant-apartment");
       roomSelect.innerHTML = tenantRoomOptions(event.target.value);
-      roomSelect.disabled = !event.target.value || !getBuilding(event.target.value)?.units.some((unit) => !getCurrentTenant(unit.id));
+      roomSelect.disabled = !event.target.value || ![...roomSelect.options].some((option) => option.value);
       document.getElementById("tenant-rent").value = "";
     }
     if (event.target.id === "tenant-apartment") {
@@ -1547,7 +1807,7 @@
     }
   });
 
-  document.addEventListener("submit", (event) => {
+  document.addEventListener("submit", async (event) => {
     if (event.target.id === "daily-room-form") {
       event.preventDefault();
       const unit = getUnit(event.target.dataset.building, event.target.dataset.unit);
@@ -1584,6 +1844,7 @@
       showToast(enabled ? `Room ${unit.number} is set up for daily rentals.` : `Room ${unit.number} is no longer offered for daily rentals. Existing bookings are kept.`);
     } else if (event.target.id === "edit-tenant-stay-form") {
       event.preventDefault();
+      if (!(await ensureRoomHoldsAvailable())) return;
       const tenant = data.tenants.find((record) => record.id === event.target.dataset.tenant && record.status === "current");
       const form = new FormData(event.target);
       const startDate = String(form.get("startDate"));
@@ -1600,10 +1861,13 @@
         && record.unitId === tenant.unitId && datesOverlap(startDate, endDate, record.startDate, record.endDate));
       const dailyConflict = data.dailyBookings.some((booking) => booking.status !== "cancelled" && booking.unitId === tenant.unitId
         && datesOverlap(startDate, endDate, booking.checkIn, booking.checkOut));
-      if (otherTenantConflict || dailyConflict) {
+      const holdConflict = hasRoomHold(tenant.unitId, startDate, endDate);
+      if (otherTenantConflict || dailyConflict || holdConflict) {
         showToast(otherTenantConflict
           ? "Those dates overlap another current tenant in this room."
-          : "Those dates overlap a confirmed daily booking. Choose dates that do not overlap.", true);
+          : dailyConflict
+            ? "Those dates overlap a confirmed daily booking. Choose dates that do not overlap."
+            : "Those dates overlap a temporary room hold. Choose different dates or remove the hold first.", true);
         return;
       }
       const previousDates = { startDate: tenant.startDate, endDate: tenant.endDate };
@@ -1618,6 +1882,7 @@
       showToast(`${tenant.name}’s stay dates have been updated.`);
     } else if (event.target.id === "edit-daily-stay-form") {
       event.preventDefault();
+      if (!(await ensureRoomHoldsAvailable())) return;
       const booking = data.dailyBookings.find((record) => record.id === event.target.dataset.booking && record.status !== "cancelled");
       const form = new FormData(event.target);
       const checkIn = String(form.get("checkIn"));
@@ -1631,10 +1896,12 @@
         return;
       }
       const conflicts = dailyBookingConflicts(booking.unitId, checkIn, checkOut, booking.id);
-      if (conflicts.monthlyConflict || conflicts.dailyConflict) {
+      if (conflicts.monthlyConflict || conflicts.dailyConflict || conflicts.holdConflict) {
         showToast(conflicts.monthlyConflict
           ? "Those dates overlap a confirmed monthly tenancy. Choose dates outside the monthly tenant’s stay."
-          : "Those dates overlap another daily booking. Choose different dates.", true);
+          : conflicts.dailyConflict
+            ? "Those dates overlap another daily booking. Choose different dates."
+            : "Those dates overlap a temporary room hold. Choose different dates or remove the hold first.", true);
         return;
       }
       const previousDates = { checkIn: booking.checkIn, checkOut: booking.checkOut };
@@ -1650,6 +1917,7 @@
       showToast(`${booking.guestName}’s stay dates have been updated.`);
     } else if (event.target.id === "daily-booking-form") {
       event.preventDefault();
+      if (!(await ensureRoomHoldsAvailable())) return;
       const form = new FormData(event.target);
       const [buildingId, unitId] = String(form.get("room")).split("|");
       const unit = getUnit(buildingId, unitId);
@@ -1676,10 +1944,12 @@
         return;
       }
       const conflicts = dailyBookingConflicts(unitId, checkIn, checkOut);
-      if (conflicts.monthlyConflict || conflicts.dailyConflict) {
+      if (conflicts.monthlyConflict || conflicts.dailyConflict || conflicts.holdConflict) {
         showToast(conflicts.monthlyConflict
           ? "Those dates overlap a confirmed monthly tenancy. Choose dates outside the monthly tenant’s stay."
-          : "Those dates overlap another daily booking. Choose different dates.", true);
+          : conflicts.dailyConflict
+            ? "Those dates overlap another daily booking. Choose different dates."
+            : "Those dates overlap a temporary room hold. Choose different dates or remove the hold first.", true);
         return;
       }
       const booking = {
@@ -1699,6 +1969,7 @@
       showToast(`Daily room booked for ${guestName} · ${formatMoney(getDailyBookingAmount(booking))} THB.`);
     } else if (event.target.id === "tenant-form") {
       event.preventDefault();
+      if (!(await ensureRoomHoldsAvailable())) return;
       const form = new FormData(event.target);
       const buildingId = String(form.get("buildingId"));
       const unitId = String(form.get("apartment"));
@@ -1715,8 +1986,8 @@
         tenantModal();
         return;
       }
-      if (endDate < startDate) {
-        document.getElementById("lease-end").setCustomValidity("The lease end date must be on or after the move-in date.");
+      if (endDate <= startDate) {
+        document.getElementById("lease-end").setCustomValidity("The lease end date must be after the move-in date.");
         document.getElementById("lease-end").reportValidity();
         document.getElementById("lease-end").setCustomValidity("");
         return;
@@ -1735,8 +2006,11 @@
       }
       const dailyConflict = data.dailyBookings.some((booking) => booking.status !== "cancelled" && booking.unitId === unitId
         && datesOverlap(startDate, endDate, booking.checkIn, booking.checkOut));
-      if (dailyConflict) {
-        showToast("Those monthly dates overlap a confirmed daily booking. Choose another room or dates that do not overlap.", true);
+      const holdConflict = hasRoomHold(unitId, startDate, endDate);
+      if (dailyConflict || holdConflict) {
+        showToast(holdConflict
+          ? "Those monthly dates overlap a temporary room hold. Choose another room or dates that do not overlap."
+          : "Those monthly dates overlap a confirmed daily booking. Choose another room or dates that do not overlap.", true);
         return;
       }
       const tenant = {

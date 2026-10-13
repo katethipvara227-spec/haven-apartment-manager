@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#f6f7f4">
     <meta name="description" content="Currently available monthly rooms listed by Haven.">
     <title>Available rooms — Haven</title>
-    <link rel="stylesheet" href="availability.css?v=availability-share-1">
+    <link rel="stylesheet" href="availability.css?v=internal-availability-1">
   </head>
   <body>
     <header class="availability-header">
@@ -14,18 +14,18 @@
         <span class="brand-mark" aria-hidden="true">H</span>
         <span><strong>haven</strong><small>ROOM AVAILABILITY</small></span>
       </a>
-      <span class="public-label">Client information</span>
+      <span class="internal-label">Internal use only</span>
     </header>
     <main class="availability-main">
       <section class="availability-intro">
         <p class="eyebrow">MONTHLY RENTALS</p>
         <h1>Rooms currently available</h1>
-        <p>Browse room types and monthly prices. Availability can change, so please confirm your move-in date with the property owner.</p>
+        <p>Availability can change, so check the selected dates before confirming any request. This link is for NATO’s internal use only.</p>
       </section>
       <div id="availability-content" aria-live="polite">
         <section class="availability-message" role="status">Loading current availability…</section>
       </div>
-      <p class="availability-privacy">This public page only shows selected room availability details. It does not provide access to tenant records or the owner’s Haven account.</p>
+      <p class="availability-privacy">Anyone with this link can view the displayed room details. Do not share it with clients. It does not provide access to tenant records or the owner’s Haven account.</p>
     </main>
     <footer class="availability-footer">
       <span>Haven · Apartment management</span>
@@ -33,6 +33,6 @@
     </footer>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase-config.js"></script>
-    <script src="availability.js?v=availability-share-1"></script>
+    <script src="availability.js?v=internal-availability-1"></script>
   </body>
 </html>

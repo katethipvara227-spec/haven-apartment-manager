@@ -24,13 +24,29 @@ Open the app through an `http://` or `https://` address to sign in; browsers do 
 
 If you sign out, Haven returns to the records saved locally on that device. Cloud data remains in your account.
 
-## Sharing a read-only availability link
+## Internal room access for NATO
 
-The signed-in owner can use **Share availability** in the top bar to publish a client link. The link is public to anyone who receives it and contains only building names and rooms that have no current monthly tenant or current-day daily booking, with each room's number, floor, room type, and monthly listed rent. It excludes street addresses, tenant information, and booking records. Treat the link as public.
+After installing the room-manager migration and publishing the updated app files, the signed-in owner can create a private room-management link from **NATO room access** in Haven. NATO can see building names, room numbers, floors, room types, monthly listed rents, and whether a room is occupied or held. It cannot read tenant names or contact details, lease records, guest information, bookings, or building addresses.
+
+NATO can submit requests to change room details or the listed rent, add a temporary hold (up to 90 days), or remove a hold. Changing a room's listed rent does not change an existing tenant's agreed rent. A request does **not** change live data by itself. The owner must sign in to Haven and select **Review NATO requests**, inspect the proposed change, and approve it. The database only applies changes through this authenticated owner-approval step. Haven also checks approved holds against monthly tenants and daily bookings. A hold stops blocking a room automatically on its end date; the end date is the first day the room is available again.
+
+Setup:
+
+1. In the configured Supabase project's SQL Editor, run `supabase-room-manager-setup.sql` after the existing Haven setup. This is an additive migration; it does not replace the private workspace setup.
+2. Publish the updated Haven files, including `index.html`, `app.js`, `styles.css`, `availability.html`, `availability.css`, `room-manager.html`, `room-manager.css`, and `room-manager.js`, to the same website location as `index.html`.
+3. Sign in to Haven and reload the page. Choose **NATO room access** and copy the private link into NATO's private instructions.
+4. Tell NATO to use that link only for internal room checks and requests. Never give it to clients. For every change, NATO should summarize the exact room and proposed change and wait for your explicit approval in chat before submitting the request. Then review and approve it in Haven. NATO must not say a change is complete before Haven confirms it.
+5. To revoke access, choose **NATO room access** and select **Revoke link**. To replace it, select **Rotate link**; the old link stops working immediately, and any still-pending requests from that link are rejected.
+
+The room-management URL is a bearer secret: anyone who has it can view room-only data and submit requests, though they cannot apply those requests without the owner's signed-in approval. Keep it out of public pages, client messages, and shared Bot instructions. Grok's browser capability must be enabled for NATO to open and use the page; if it cannot browse, do not give it the owner's Haven login.
+
+## Internal read-only availability link
+
+The signed-in owner can use **Share availability** to publish a read-only snapshot for internal use. The link is public to anyone who receives it and contains only building names and rooms that have no current monthly tenant, current-day daily booking, or hold today, with each room's number, floor, room type, and monthly listed rent. It excludes street addresses, tenant information, and booking records. Do not send this link to clients.
 
 The public page reads only a sanitized snapshot through the `get_haven_public_availability` database function. Direct anonymous access to the publication table is revoked; the function returns listing fields only when called with the unguessable share token in the link. Existing Haven installations should run `supabase-public-availability-setup.sql` in the configured Supabase project's SQL Editor before using this feature. New installations can run the complete `supabase-setup.sql`. Existing workspace data and its owner-only row-level security policy are unchanged.
 
-The public snapshot does not refresh itself when the owner's records change. After updating room or tenant records, sign in to Haven and click **Share availability** again; the same link is updated. The page shows when the snapshot was last refreshed. Ask clients to confirm availability for their intended move-in date. Grok can share the link, but the current custom bot has no direct live lookup connection; add the link to its instructions if its settings allow static instructions, or paste the link into a reply.
+The public snapshot does not refresh itself when the owner's records change. After updating room or tenant records, sign in to Haven and click **Share availability** again; the same link is updated. The page shows when the snapshot was last refreshed. NATO should use the room-management page for current internal checks and must not share either internal link with clients.
 
 ## Files
 
@@ -38,6 +54,8 @@ The public snapshot does not refresh itself when the owner's records change. Aft
 - `styles.css` — responsive styles
 - `app.js` — application behavior and browser storage
 - `availability.html`, `availability.css`, and `availability.js` — public read-only availability page
+- `room-manager.html`, `room-manager.css`, and `room-manager.js` — private-token, room-only request page for NATO
 - `supabase-config.js` — public Supabase project URL and publishable key
 - `supabase-setup.sql` — private per-user workspace and sanitized public availability setup
 - `supabase-public-availability-setup.sql` — additive migration for existing Supabase installations
+- `supabase-room-manager-setup.sql` — additive room-only access, temporary holds, and authenticated approval migration

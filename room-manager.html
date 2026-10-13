@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f6f7f4">
+    <meta name="referrer" content="no-referrer">
+    <title>Haven — Room manager</title>
+    <link rel="stylesheet" href="room-manager.css?v=room-manager-1">
+  </head>
+  <body>
+    <main class="manager-shell">
+      <header class="manager-header">
+        <a class="brand" href="index.html" aria-label="Haven home"><span aria-hidden="true">⌂</span><strong>haven</strong></a>
+        <span class="internal-label">INTERNAL ROOM MANAGEMENT</span>
+      </header>
+      <section class="intro">
+        <p class="eyebrow">ROOMS ONLY</p>
+        <h1>Room manager</h1>
+        <p>Check room status, propose room-detail changes, and request temporary holds. Tenant names, contact details, leases, and booking guest details are not shown.</p>
+      </section>
+      <div id="manager-message" class="manager-message" role="status" aria-live="polite">Loading room information…</div>
+      <div id="manager-content"></div>
+      <footer class="manager-footer">Internal use only. Do not send this page or its access link to clients. NATO can submit room-change requests, but they do not take effect until the Haven owner approves them in the signed-in app. Holds use a start date and an end date (the first day the room is available again), and release automatically on that end date.</footer>
+    </main>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-config.js"></script>
+    <script src="room-manager.js?v=room-manager-1"></script>
+  </body>
+</html>
